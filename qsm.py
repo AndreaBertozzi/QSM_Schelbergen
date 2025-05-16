@@ -177,12 +177,17 @@ class LogProfile(EnvAtmosphericPressure):
 
     def plot_wind_profile(self):
         """Plot the wind speed versus the height above ground."""
-        heights = [50., 75., 100., 150., 200., 300., 400., 500.]
+        heights = [50., 75., 100., 150., 200., 300.]
         wind_speeds = [self.calculate_wind(h) for h in heights]
         plt.plot(wind_speeds, heights)
-        plt.xlabel('Wind speed [m/s]')
-        plt.ylabel('Height [m]')
-        plt.grid(True)
+        #fig = plt.gcf()
+        #fig.set_figwidth(3)
+        #fig.set_figheight(3.5)      
+        #plt.xlabel('Wind speed [m/s]')
+        #plt.ylabel('Height [m]')
+        #plt.grid(True)
+        #plt.tight_layout()
+
 
 
 class NormalisedWindTable1D(EnvAtmosphericPressure):
@@ -458,9 +463,13 @@ class SysPropsAeroCurves(SysPropsFixedAeroCoeffs):
         self.pitch_depowered = -5 * np.pi/180.  # [rad]
 
         # Aerodynamic coefficients of kite and tether.
-        self.angles_of_attack_curve = np.linspace(0, 25, 26) * np.pi/180.
-        self.kite_lift_coefficients_curve_parameters = np.array([0.1, 2.5, 10*np.pi/180., 8*np.pi/180.])*1.15
-        self.kite_drag_coefficients_curve_parameters = np.array([0.1108, 1.3822, -1.384])/2
+        self.angles_of_attack_lift = None
+        self.angles_of_attack_drag = None  
+        self.kite_lift_coefficients_curve = None
+        self.kite_drag_coefficients_curve = None     
+        #self.angles_of_attack_curve = np.linspace(0, 25, 26) * np.pi/180.
+        #self.kite_lift_coefficients_curve_parameters = np.array([0.1, 2.5, 10*np.pi/180., 8*np.pi/180.])*1.15
+        #self.kite_drag_coefficients_curve_parameters = np.array([0.1108, 1.3822, -1.384])/2
         self.tether_drag_coefficient = 1.1  # [-]
 
         # Relevant operational limits.
@@ -514,15 +523,17 @@ class SysPropsAeroCurves(SysPropsFixedAeroCoeffs):
                 x = a - alpha_switch - d_alpha_peak
                 return np.array([1, x, x**2]).dot(coeffs_part2)
 
-        kite_lift_coefficient = lift_curve(alpha)
-        kite_drag_coefficient = np.array([1, alpha, alpha**2]).dot(self.kite_drag_coefficients_curve_parameters)
+        #kite_lift_coefficient = lift_curve(alpha)
+        kite_lift_coefficient = np.interp(alpha, self.angles_of_attack_lift, self.kite_lift_coefficients_curve)
+        #kite_drag_coefficient = np.array([1, alpha, alpha**2]).dot(self.kite_drag_coefficients_curve_parameters)
+        kite_drag_coefficient = np.polyval(np.polyfit(self.angles_of_attack_drag, self.kite_drag_coefficients_curve, 2), alpha)
         c_l = kite_lift_coefficient
         c_d_tether = .25*d*le/s*self.tether_drag_coefficient
         c_d = kite_drag_coefficient + c_d_tether
 
         self.aerodynamic_force_coefficient = np.sqrt(c_l**2 + c_d**2)
         self.lift_to_drag = c_l/c_d
-
+        
     def update(self, tether_length, kite_powered=True):
         self.tether_length = tether_length
         self.calculate_tether_mass()
@@ -800,7 +811,7 @@ class SteadyState:
             f_aero_theta = -(.5*m_tether + m)*g*np.sin(theta)  # tangential aerodynamic force
 
         # Iterative procedure to determine the angle of attack.
-        if system_properties.__class__.__name__ == "SysPropsAerodynamicCurves":
+        if system_properties.__class__.__name__ == "SysPropsAeroCurves":
             update_aero_coefficients = True
             alpha = 15*np.pi/180.  # Initial assumption for angle of attack.
             system_properties.calculate_aerodynamic_properties(alpha)
@@ -900,16 +911,17 @@ class SteadyState:
 
             if update_aero_coefficients:
                 alpha_new = inflow_angle + system_properties.pitch
+                #print('Angle of attack: ', np.rad2deg(alpha_new))
                 d_alpha = alpha_new - alpha
                 if abs(d_alpha) < .01 * np.pi/180.:
                     self.angle_of_attack = alpha
                     self.lift_to_drag = system_properties.lift_to_drag
                     break
-                elif self.n_iterations_aoa == 50:
+                elif self.n_iterations_aoa >= 50: 
                     self.process_error("Angle of attack did not converge.", 9, print_details)
                 else:
                     # fraction_d_alpha -= .01
-                    alpha = alpha + d_alpha*.95  #*fraction_d_alpha
+                    alpha = alpha + d_alpha*.85  #*fraction_d_alpha
                     system_properties.calculate_aerodynamic_properties(alpha)
             else:
                 break
@@ -1008,7 +1020,7 @@ class TimeSeries:
         self.average_power = None
         self.duration = None
 
-    def time_plot(self, plot_parameters, y_labels=None, y_scaling=None, plot_markers=None, fig_num=None):
+    def time_plot(self, plot_parameters, y_labels=None, y_scaling=None, plot_markers=None, fig_num=None, plot_kwargs={}):
         """Generic plotting method for making a time plot of `KiteKinematics` and `SteadyState` attributes.
 
         Args:
@@ -1020,7 +1032,7 @@ class TimeSeries:
         data_sources = (self.kinematics, self.steady_states)
         source_labels = ('kin', 'ss')
 
-        plot_traces(self.time, data_sources, source_labels, plot_parameters, y_labels, y_scaling, plot_markers=plot_markers, fig_num=fig_num)
+        plot_traces(self.time, data_sources, source_labels, plot_parameters, y_labels, y_scaling, plot_markers=plot_markers, fig_num=fig_num, plot_kwargs=plot_kwargs)
 
     def trajectory_plot(self, fig_num=None, plot_kwargs={'linestyle': ':'}, steady_state_markers=True):
         """Plot of the downwind versus vertical position of the kite.
@@ -1260,7 +1272,6 @@ class Phase(TimeSeries):
         # Empty the result lists.
         self.time, self.kinematics, self.steady_states, self.n_time_points = [], [], [], 0
         self.min_reeling_speed, self.max_reeling_speed = np.inf, -np.inf
-
         self.system_properties = system_properties
         self.environment_state = environment_state
         self.steady_state_config = steady_state_config
@@ -1645,7 +1656,7 @@ class TransitionPhase(Phase):
 
         # Binary kite aerodynamic state.
         #TODO: kite powered or not?
-        self.kite_powered = True
+        self.kite_powered = False
 
         # Properties of initial state and final position.
         self.tether_length_start = 240.
@@ -1888,12 +1899,12 @@ class TractionPhaseHybrid(TractionPhase):
         self.n_crosswind_patterns = phase_duration_aim/avg_pattern_duration
 
 
-class LissajousPattern:
-    def __init__(self):
+class LissajousPattern():
+    def __init__(self, settings):
         # Lissajous curve properties for figure 8.
-        self.elevation_max = 4 * np.pi / 180  # [rad] sets max (relative) elevation angle: positive value -> flying up
+        self.elevation_max = settings['rel_elevation_angle']#4 * np.pi / 180  # [rad] sets max (relative) elevation angle: positive value -> flying up
         # at edges
-        self.azimuth_max = 20 * np.pi / 180  # [rad] sets max azimuth angle
+        self.azimuth_max = settings['azimuth_angle']#15 * np.pi / 180  # [rad] sets max azimuth angle
 
         # Calculated property.
         self.curve_length_unit_sphere = self.calc_curve_length_unit_sphere()
@@ -1902,7 +1913,6 @@ class LissajousPattern:
         # Elevation and azimuth as function of normalized arc length.
         theta = self.elevation_max * np.sin(4 * np.pi * s)  # [rad]
         phi = self.azimuth_max * np.sin(2 * np.pi * s)  # [rad]
-
         # Derivatives wrt normalized arc length.
         dtheta_ds = 4 * np.pi * self.elevation_max * np.cos(4 * np.pi * s)  # [-]
         dphi_ds = 2 * np.pi * self.azimuth_max * np.cos(2 * np.pi * s)  # [-]
@@ -1949,7 +1959,7 @@ class LookupPattern:
 
 
 class TractionPhasePattern(Phase):
-    def __init__(self, phase_settings={'control': ('reeling_factor', .37)}, impose_operational_limits=True):
+    def __init__(self, phase_settings={'control': ('reeling_factor', .37), 'pattern': {'azimuth_angle': 10.6 * np.pi / 180, 'rel_elevation_angle': 4 * np.pi / 180}}, impose_operational_limits=True):
         """
         Args:
             phase_settings (tuple, optional): Setting parent's `control_settings` attribute.
@@ -1964,12 +1974,13 @@ class TractionPhasePattern(Phase):
         # Properties of initial state and final position.
         self.tether_length_start = 240.
         self.tether_length_end = 385.
-        self.elevation_angle = TractionConstantElevation(25. * np.pi / 180.)
+        self.elevation_angle = np.deg2rad(50)
+        self.azimuth_angle = np.deg2rad(20)               
 
         # State of kite along the cross-wind pattern.
         self.n_crosswind_patterns = 0.
-        self.pattern = LissajousPattern()
-
+        self.pattern = LissajousPattern(phase_settings['pattern'])
+ 
     def finalize_start_and_end_kite_obj(self):
         """Finalize the initial state and ending criteria before running the simulation, respectively `kinematics_start`
         and `position_end`. Furthermore, calculating `delta_path_angle`."""
@@ -2042,7 +2053,7 @@ class EvaluatePattern(Phase):  # Determine performance along cross wind pattern 
         # Representative traction state of kite along the cross-wind pattern.
         self.tether_length = settings['tether_length']
         self.elevation_angle_ref = settings['elevation_angle_ref']
-
+        
         # Result lists with time and states.
         self.kinematics = None
         self.steady_states = None
@@ -2344,7 +2355,7 @@ class Cycle(TimeSeries):
 
         return error_in_phase, self.average_power
 
-    def trajectory_plot3d(self, fig_num=None):
+    def trajectory_plot3d(self, fig_num=None, plot_kwargs={'color': 'k'}):
         """Plot the 3D pumping cycle trajectory of the kite using the identical named methods of the 3 phase objects.
 
         Args:
@@ -2354,7 +2365,6 @@ class Cycle(TimeSeries):
         if fig_num is None:
             plt.figure()
         fig_num = plt.gcf().number
-        plot_kwargs = {'color': 'k'}  #default_colors[2]}
         self.retraction_phase.trajectory_plot3d(fig_num=fig_num, animation=False, plot_kwargs=plot_kwargs)
         self.transition_phase.trajectory_plot3d(fig_num=fig_num, animation=False, plot_kwargs=plot_kwargs)
         self.traction_phase.trajectory_plot3d(fig_num=fig_num, animation=False, plot_kwargs=plot_kwargs)
