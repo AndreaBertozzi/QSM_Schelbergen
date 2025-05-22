@@ -11,7 +11,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from copy import copy
 import pandas as pd
-from utils import zip_el, plot_traces, default_colors
+from qsm_utils import zip_el, plot_traces, default_colors
 
 np.seterr(all='raise')
 
@@ -911,13 +911,13 @@ class SteadyState:
 
             if update_aero_coefficients:
                 alpha_new = inflow_angle + system_properties.pitch
-                #print('Angle of attack: ', np.rad2deg(alpha_new))
+                print('Angle of attack: ', np.rad2deg(alpha_new))
                 d_alpha = alpha_new - alpha
                 if abs(d_alpha) < .01 * np.pi/180.:
                     self.angle_of_attack = alpha
                     self.lift_to_drag = system_properties.lift_to_drag
                     break
-                elif self.n_iterations_aoa >= 50: 
+                elif self.n_iterations_aoa == 50: 
                     self.process_error("Angle of attack did not converge.", 9, print_details)
                 else:
                     # fraction_d_alpha -= .01

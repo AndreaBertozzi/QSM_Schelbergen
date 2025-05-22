@@ -25,7 +25,6 @@ def flatten_dict(input_dict, parent_key='', sep='.'):
             items.append((new_key, v))
     return dict(items)
 
-
 def zip_el(*args):
     """"Zip iterables, only if input lists have same length.
 
@@ -42,7 +41,6 @@ def zip_el(*args):
     lengths = [len(l) for l in [*args]]
     assert all(diff(lengths) == 0), "All the input lists should have the same length."
     return zip(*args)
-
 
 def plot_traces(x, data_sources, source_labels, plot_parameters, y_labels=None, y_scaling=None, fig_num=None,
                 plot_kwargs={}, plot_markers=None, x_label='Time [s]'):
@@ -95,34 +93,3 @@ def plot_traces(x, data_sources, source_labels, plot_parameters, y_labels=None, 
         # ax.legend()
     axes[-1].set_xlabel(x_label)
     axes[-1].set_xlim([0, None])
-
-
-# def subplots_from_dicts(x, time_traces, plot_keys=None, mark_points=None):
-#     if plot_keys is None:
-#         plot_keys = list(time_traces[0])
-#
-#     fig, ax = plt.subplots(len(plot_keys), 1, sharex=True)
-#     if len(plot_keys) == 1:
-#         ax = (ax,)
-#     for i, param in enumerate(plot_keys):
-#         source_labels = [src[0] for src in time_traces[0][param]]
-#         for j, lbl in enumerate(source_labels):
-#             # if 'angle' in param:
-#             #     y = [d[param]*180/pi for d in plot_dicts]
-#             # else:
-#             y = [point[param][j][1] for point in time_traces]
-#             ax[i].plot(x, y, label=lbl)
-#             if mark_points:
-#                 x_mark, y_mark = zip(*[(a, b) for a, b in zip_el(x, y) if a in mark_points])
-#                 ax[i].plot(x_mark, y_mark, 's', markerfacecolor='None')
-#         ax[i].set_ylabel(param)
-#         ax[i].grid()
-#         ax[i].legend()
-#     ax[-1].set_xlabel('Time [s]')
-#
-#
-# def simple_integration(y, x):
-#     integral = 0
-#     for x0, x1, y1 in zip_el(x[:-1], x[1:], y[1:]):
-#         integral += y1*(x1-x0)
-#     return integral

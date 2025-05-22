@@ -2,3 +2,4 @@ __pycache__
 .env
 old_examples
 *.pkl
+A04_documentation_figures.py
