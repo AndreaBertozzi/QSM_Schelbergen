@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """Utility functions."""
 
+import yaml
 import matplotlib.pyplot as plt
 from numpy import all, diff, array
 
@@ -143,4 +144,3 @@ def load_config(file_path):
 
     return params_dict
 
-    
